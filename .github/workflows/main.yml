@@ -1,0 +1,63 @@
+
+name: Windows CI
+
+on:
+  push:
+    paths-ignore:
+      - "**/*.md"
+      - "**/*.txt"
+  pull_request:
+    paths-ignore:
+      - "**/*.md"
+      - "**/*.txt"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          choco install mingw --yes
+          choco install make --yes
+
+      - name: Download cURL for Windows
+        shell: pwsh
+        run: |
+          Invoke-WebRequest `
+            -Uri "https://curl.se/windows/dl-8.8.0_3/curl-8.8.0_3-win64-mingw.zip" `
+            -OutFile curl.zip
+
+      - name: Extract cURL
+        shell: pwsh
+        run: |
+          Expand-Archive curl.zip -DestinationPath .
+
+      - name: Build Windows x64
+        shell: pwsh
+        run: |
+          $env:CURL_PATH = "curl-8.8.0_3-win64-mingw"
+          make -f Makefile.win
+
+      - name: Prepare artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force fetchpkg-win64
+          Copy-Item *.exe fetchpkg-win64/
+          Copy-Item curl-8.8.0_3-win64-mingw/bin/libcurl-x64.dll fetchpkg-win64/
+
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: fetchpkg-Windows-x64
+          path: fetchpkg-win64/
+          if-no-files-found: error
